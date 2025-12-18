@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ClipboardList, 
-  Target, 
-  Users, 
-  Map, 
-  Download, 
-  AlertCircle, 
+import {
+  ClipboardList,
+  Target,
+  Users,
+  Map,
+  Download,
+  AlertCircle,
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
@@ -32,30 +32,30 @@ const App = () => {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState(null);
   const [diagnosis, setDiagnosis] = useState(null);
-  
+
   const [sessionId] = useState(() => `PIE-${Math.random().toString(36).substr(2, 9).toUpperCase()}`);
 
   // Estructura completa basada en el Protocolo Root Routes
   const [pieData, setPieData] = useState({
-    contexto: { 
-      vende: '', 
-      ticket: '', 
-      canales: '', 
-      limites: '' 
+    contexto: {
+      vende: '',
+      ticket: '',
+      canales: '',
+      limites: ''
     },
-    territorio: { 
-      temasSi: '', 
-      lineasRojas: '', 
-      tension: 'Media' 
+    territorio: {
+      temasSi: '',
+      lineasRojas: '',
+      tension: 'Media'
     },
-    audiencia: { 
-      lenguaje: '', 
-      sofisticacion: 'Consciente del Problema', 
-      objeciones: '' 
+    audiencia: {
+      lenguaje: '',
+      sofisticacion: 'Consciente del Problema',
+      objeciones: ''
     },
-    objetivo: { 
-      prioritario: 'Ventas', 
-      razon: '' 
+    objetivo: {
+      prioritario: 'Ventas',
+      razon: ''
     }
   });
 
@@ -75,64 +75,103 @@ const App = () => {
   };
 
   /**
-   * SIMULACIÓN DE SUBIDA A CLOUD
+   * ENVÍO REAL A SUPABASE
    */
   const handleSubmitToGoogleCloud = async () => {
     setIsSubmitting(true);
     setError(null);
 
+    // Validación básica de entorno
+    if (!import.meta.env.VITE_SUPABASE_URL) {
+      setError("Falta configuración de Supabase (VITE_SUPABASE_URL no definido). Revisa tu archivo .env");
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
-      // Aquí iría la llamada real a Firebase/Supabase
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      console.log("Datos persistidos en Root Routes OS:", { sessionId, pieData });
-      
+      // 1. Preparar el payload
+      const payload = {
+        session_id: sessionId,
+        data: pieData,
+        metadata: {
+          user_agent: navigator.userAgent,
+          timestamp: new Date().toISOString(),
+          version: '1.0.0'
+        },
+        status: 'raw_input'
+      };
+
+      // 2. Enviar a la tabla 'ingestions'
+      const { data, error: supabaseError } = await supabase
+        .from('ingestions')
+        .insert([payload])
+        .select();
+
+      if (supabaseError) throw supabaseError;
+
+      console.log("Datos persistidos en Supabase:", data);
+
+      // 3. Éxito
       setIsSubmitting(false);
       setSubmitted(true);
+
     } catch (err) {
-      setError("Error al conectar con el sistema operativo.");
+      console.error("Error Supabase:", err);
+      setError(`Error de sincronización: ${err.message || 'Error desconocido'}`);
       setIsSubmitting(false);
     }
   };
 
   const downloadArtifacts = () => {
     const generateMarkdown = (title, data) => {
-      return `# ROOT ROUTES OS - ${title}
-ID PROTOCOLO: ${sessionId}
-FECHA: ${new Date().toISOString()}
+      const jsonBlock = JSON.stringify(data, null, 2);
 
-## 01. CONTEXTO DE NEGOCIO
+      return `---
+root-routes-type: ingestion-protocol
+id: ${sessionId}
+date: ${new Date().toISOString()}
+status: raw-input
+---
+
+# ROOT ROUTES OS - ${title}
+
+> **SISTEMA**: Este archivo contiene la verdad fundamental del negocio del cliente. Úsalo como contexto inmutable para los nodos Estratega y Redactor.
+
+## 01. CONTEXTO DE NEGOCIO (Realidad Operativa)
 - **Oferta Principal**: ${data.contexto.vende || 'No definido'}
 - **Ticket Promedio**: ${data.contexto.ticket || 'No definido'}
 - **Canales Actuales**: ${data.contexto.canales || 'No definido'}
 - **Límites Duros (Anti-Venta)**: ${data.contexto.limites || 'No definido'}
 
-## 02. TERRITORIO EDITORIAL
+## 02. TERRITORIO EDITORIAL (Límites de Autoridad)
 - **Autoridad (Temas SÍ)**: ${data.territorio.temasSi || 'No definido'}
 - **Líneas Rojas (Temas NO)**: ${data.territorio.lineasRojas || 'No definido'}
 - **Nivel de Tensión**: ${data.territorio.tension || 'No definido'}
 
-## 03. AUDIENCIA & LENGUAJE
-- **Lenguaje del Cliente**: ${data.audiencia.lenguaje || 'No definido'}
+## 03. AUDIENCIA & LENGUAJE (Psicografía)
+- **Lenguaje del Cliente**: "${data.audiencia.lenguaje || 'No definido'}"
 - **Nivel de Sofisticación**: ${data.audiencia.sofisticacion || 'No definido'}
 - **Objeciones Principales**: ${data.audiencia.objeciones || 'No definido'}
 
-## 04. OBJETIVO ESTRATÉGICO
+## 04. OBJETIVO ESTRATÉGICO (North Star)
 - **Prioridad**: ${data.objetivo.prioritario || 'No definido'}
 - **Razón Estratégica**: ${data.objetivo.razon || 'No definido'}
 
 ---
-*Generado automáticamente por Root Routes Ingestion Node*
+## 🤖 MACHINE READABLE CONTEXT (DO NOT EDIT)
+\`\`\`json
+${jsonBlock}
+\`\`\`
 `;
     };
 
     const files = [
-      { name: `PIE_${sessionId}_RootRoutes.md`, content: generateMarkdown('REPORTE DE INGESTIÓN', pieData) }
+      { name: `PIE_${sessionId}_SystemReady.md`, content: generateMarkdown('REPORTE DE INGESTIÓN', pieData) }
     ];
 
     files.forEach(file => {
       const element = document.createElement("a");
-      const fileData = new Blob([file.content], {type: 'text/markdown'});
+      const fileData = new Blob([file.content], { type: 'text/markdown' });
       element.href = URL.createObjectURL(fileData);
       element.download = file.name;
       document.body.appendChild(element);
@@ -179,13 +218,13 @@ FECHA: ${new Date().toISOString()}
             La información ha entrado al <strong>Root Routes OS</strong>. El nodo Estratega comenzará el procesamiento.
           </p>
           <div className="pt-6 border-t border-slate-50 flex flex-col gap-3">
-             <button 
+            <button
               onClick={downloadArtifacts}
               className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-black transition-colors"
             >
               Descargar Copia Local (.md)
             </button>
-            <button 
+            <button
               onClick={() => window.location.reload()}
               className="text-xs text-slate-400 hover:text-black font-bold uppercase tracking-widest transition-colors mt-2"
             >
@@ -210,34 +249,32 @@ FECHA: ${new Date().toISOString()}
             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Ingestion Interface v1.0</p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-4">
-           <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-full border border-slate-200">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-              <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">System Online</span>
-           </div>
+          <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-full border border-slate-200">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+            <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">System Online</span>
+          </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
+
         {/* SIDEBAR NAVIGATION */}
         <nav className="lg:col-span-3 space-y-2">
           {steps.map((step, index) => (
             <button
               key={step.id}
               onClick={() => setActiveStep(index)}
-              className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl transition-all duration-300 text-left group ${
-                activeStep === index 
-                ? 'bg-white shadow-xl shadow-slate-200/50 text-black border border-slate-100 scale-105' 
+              className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl transition-all duration-300 text-left group ${activeStep === index
+                ? 'bg-white shadow-xl shadow-slate-200/50 text-black border border-slate-100 scale-105'
                 : 'text-slate-400 hover:text-slate-600 hover:bg-white/40'
-              }`}
+                }`}
             >
-              <div className={`p-2 rounded-xl transition-all ${
-                activeStep === index 
-                  ? `bg-${step.color}-100 text-${step.color}-600` 
-                  : 'bg-slate-100 text-slate-400 group-hover:bg-white group-hover:shadow-sm'
-              }`}>
+              <div className={`p-2 rounded-xl transition-all ${activeStep === index
+                ? `bg-${step.color}-100 text-${step.color}-600`
+                : 'bg-slate-100 text-slate-400 group-hover:bg-white group-hover:shadow-sm'
+                }`}>
                 {step.icon}
               </div>
               <div>
@@ -250,39 +287,38 @@ FECHA: ${new Date().toISOString()}
 
           {/* PROGRESS WIDGET */}
           <div className="mt-8 p-6 rounded-3xl bg-slate-900 text-white relative overflow-hidden hidden lg:block">
-             <div className="relative z-10">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Progreso del PIE</p>
-                <div className="text-3xl font-black italic tracking-tighter mb-1">
-                  {Math.round((Object.values(pieData).reduce((acc, curr) => acc + Object.values(curr).filter(Boolean).length, 0) / 12) * 100)}%
-                </div>
-                <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
-                   <div 
-                      className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500"
-                      style={{ width: `${(Object.values(pieData).reduce((acc, curr) => acc + Object.values(curr).filter(Boolean).length, 0) / 12) * 100}%` }}
-                   ></div>
-                </div>
-             </div>
-             
-             {/* Background Decoration */}
-             <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-blue-600/20 blur-3xl rounded-full pointer-events-none"></div>
+            <div className="relative z-10">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Progreso del PIE</p>
+              <div className="text-3xl font-black italic tracking-tighter mb-1">
+                {Math.round((Object.values(pieData).reduce((acc, curr) => acc + Object.values(curr).filter(Boolean).length, 0) / 12) * 100)}%
+              </div>
+              <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500"
+                  style={{ width: `${(Object.values(pieData).reduce((acc, curr) => acc + Object.values(curr).filter(Boolean).length, 0) / 12) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+
+            {/* Background Decoration */}
+            <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-blue-600/20 blur-3xl rounded-full pointer-events-none"></div>
           </div>
         </nav>
 
         {/* MAIN FORM AREA */}
         <div className="lg:col-span-9">
           <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 min-h-[600px] flex flex-col relative overflow-hidden">
-            
+
             {/* Top Bar Decoration */}
-            <div className={`h-2 w-full bg-gradient-to-r transition-all duration-500 ${
-              activeStep === 0 ? 'from-blue-500 to-blue-300' :
+            <div className={`h-2 w-full bg-gradient-to-r transition-all duration-500 ${activeStep === 0 ? 'from-blue-500 to-blue-300' :
               activeStep === 1 ? 'from-purple-500 to-purple-300' :
-              activeStep === 2 ? 'from-green-500 to-green-300' :
-              activeStep === 3 ? 'from-red-500 to-red-300' :
-              'from-yellow-500 to-orange-500'
-            }`}></div>
+                activeStep === 2 ? 'from-green-500 to-green-300' :
+                  activeStep === 3 ? 'from-red-500 to-red-300' :
+                    'from-yellow-500 to-orange-500'
+              }`}></div>
 
             <div className="p-8 md:p-12 flex-grow overflow-y-auto custom-scrollbar">
-              
+
               {/* --- PASO 0: CONTEXTO --- */}
               {activeStep === 0 && (
                 <section className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
@@ -293,10 +329,10 @@ FECHA: ${new Date().toISOString()}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="col-span-2 space-y-3">
-                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest">¿Qué experiencia vendes?</label>
-                      <textarea 
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest">¿Qué experiencia turística vendes?</label>
+                      <textarea
                         className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none transition-all h-32 focus:border-blue-500 focus:bg-white font-medium resize-none"
-                        placeholder="Describe tu producto o servicio principal..."
+                        placeholder="Ej. Tour de café en finca cafetera, hospedaje ecológico en la sierra, avistamiento de aves al amanecer..."
                         value={pieData.contexto.vende}
                         onChange={(e) => handleInputChange('contexto', 'vende', e.target.value)}
                       />
@@ -304,12 +340,12 @@ FECHA: ${new Date().toISOString()}
 
                     <div className="space-y-3">
                       <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <DollarSign size={14} /> Ticket Promedio
+                        <DollarSign size={14} /> Ticket Promedio por Cliente
                       </label>
-                      <input 
+                      <input
                         type="text"
                         className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none transition-all focus:border-blue-500 focus:bg-white font-bold"
-                        placeholder="Ej. $500 - $2000 USD"
+                        placeholder="Ej. $150.000 COP por pareja"
                         value={pieData.contexto.ticket}
                         onChange={(e) => handleInputChange('contexto', 'ticket', e.target.value)}
                       />
@@ -319,10 +355,10 @@ FECHA: ${new Date().toISOString()}
                       <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         <Megaphone size={14} /> Canales Actuales
                       </label>
-                      <input 
+                      <input
                         type="text"
                         className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none transition-all focus:border-blue-500 focus:bg-white font-medium"
-                        placeholder="Ej. LinkedIn, Boca a boca..."
+                        placeholder="Ej. Instagram (DM), WhatsApp, Booking.com..."
                         value={pieData.contexto.canales}
                         onChange={(e) => handleInputChange('contexto', 'canales', e.target.value)}
                       />
@@ -330,11 +366,11 @@ FECHA: ${new Date().toISOString()}
 
                     <div className="col-span-2 space-y-3">
                       <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 text-red-500">
-                        <ShieldAlert size={14} /> Límites Duros (Anti-Venta)
+                        <ShieldAlert size={14} /> Límites Duros (Lo que NO haces)
                       </label>
-                      <textarea 
+                      <textarea
                         className="w-full p-4 bg-red-50/50 border-2 border-red-100 rounded-2xl outline-none transition-all h-24 focus:border-red-500 focus:bg-white font-medium resize-none placeholder:text-red-300"
-                        placeholder="¿Qué NO haces? ¿Con quién NO trabajas?"
+                        placeholder="Ej. No aceptamos mascotas, no hacemos descuentos a grupos grandes, no ofrecemos transporte desde el aeropuerto..."
                         value={pieData.contexto.limites}
                         onChange={(e) => handleInputChange('contexto', 'limites', e.target.value)}
                       />
@@ -351,23 +387,23 @@ FECHA: ${new Date().toISOString()}
                     <p className="text-slate-500 text-lg">Define dónde tienes autoridad y qué líneas no cruzarás.</p>
                   </header>
 
-                   <div className="grid grid-cols-1 gap-8">
+                  <div className="grid grid-cols-1 gap-8">
                     <div className="space-y-3">
-                      <label className="text-xs font-black text-purple-400 uppercase tracking-widest">Temas de Autoridad (Sí)</label>
-                      <textarea 
+                      <label className="text-xs font-black text-purple-400 uppercase tracking-widest">Temas de Autoridad (Tus Fortalezas)</label>
+                      <textarea
                         className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none transition-all h-28 focus:border-purple-500 focus:bg-white font-medium resize-none"
-                        placeholder="¿De qué puedes hablar horas sin preparación?"
+                        placeholder="Ej. Historia de la región, conservación de aves, gastronomía ancestral del pueblo..."
                         value={pieData.territorio.temasSi}
                         onChange={(e) => handleInputChange('territorio', 'temasSi', e.target.value)}
                       />
                     </div>
 
                     <div className="space-y-3">
-                      <label className="text-xs font-black text-red-400 uppercase tracking-widest">Líneas Rojas (Temas Tabú)</label>
-                      <input 
-                        type="text" 
+                      <label className="text-xs font-black text-red-400 uppercase tracking-widest">Líneas Rojas (Lo que NO tocamos)</label>
+                      <input
+                        type="text"
                         className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none transition-all focus:border-red-500 focus:bg-white font-medium"
-                        placeholder="Política, Religión, Vida privada..."
+                        placeholder="Ej. Política local, religión, precios de la competencia..."
                         value={pieData.territorio.lineasRojas}
                         onChange={(e) => handleInputChange('territorio', 'lineasRojas', e.target.value)}
                       />
@@ -377,17 +413,16 @@ FECHA: ${new Date().toISOString()}
                       <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Nivel de Tensión (Polarización)</label>
                       <div className="flex gap-4">
                         {['Baja', 'Media', 'Alta'].map((nivel) => (
-                           <button
+                          <button
                             key={nivel}
                             onClick={() => handleInputChange('territorio', 'tension', nivel)}
-                            className={`flex-1 py-4 rounded-xl font-bold uppercase tracking-wider text-sm border-2 transition-all ${
-                              pieData.territorio.tension === nivel 
-                              ? 'border-purple-500 bg-purple-50 text-purple-700' 
+                            className={`flex-1 py-4 rounded-xl font-bold uppercase tracking-wider text-sm border-2 transition-all ${pieData.territorio.tension === nivel
+                              ? 'border-purple-500 bg-purple-50 text-purple-700'
                               : 'border-slate-100 bg-white text-slate-400 hover:border-slate-300'
-                            }`}
-                           >
+                              }`}
+                          >
                             {nivel}
-                           </button>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -405,36 +440,36 @@ FECHA: ${new Date().toISOString()}
 
                   <div className="grid grid-cols-1 gap-8">
                     <div className="space-y-3">
-                      <label className="text-xs font-black text-green-500 uppercase tracking-widest">Lenguaje del Cliente (Verbatim)</label>
-                      <textarea 
+                      <label className="text-xs font-black text-green-500 uppercase tracking-widest">Lenguaje del Cliente (Lo que dicen textualmente)</label>
+                      <textarea
                         className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none transition-all h-32 focus:border-green-500 focus:bg-white font-medium resize-none italic"
-                        placeholder='"Siento que estoy perdiendo dinero...", "Nadie me entiende cuando explico..."'
+                        placeholder='"¿Es seguro llegar hasta allá?", "¿La comida incluye opciones vegetarianas?", "Busco algo tranquilo, lejos del ruido..."'
                         value={pieData.audiencia.lenguaje}
                         onChange={(e) => handleInputChange('audiencia', 'lenguaje', e.target.value)}
                       />
-                      <p className="text-[10px] text-slate-400 text-right">Usa comillas para frases exactas que has escuchado.</p>
+                      <p className="text-[10px] text-slate-400 text-right">Usa comillas para frases exactas que has escuchado de tus huéspedes/clientes.</p>
                     </div>
 
                     <div className="space-y-3">
-                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Nivel de Sofisticación</label>
-                      <select 
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Nivel de Sofisticación del Turista</label>
+                      <select
                         className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none transition-all focus:border-green-500 focus:bg-white font-bold text-slate-700 appearance-none"
                         value={pieData.audiencia.sofisticacion}
                         onChange={(e) => handleInputChange('audiencia', 'sofisticacion', e.target.value)}
                       >
-                         <option>Inconsciente (No sabe que tiene un problema)</option>
-                         <option>Consciente del Problema (Busca, pero no halla)</option>
-                         <option>Consciente de la Solución (Compara opciones)</option>
-                         <option>Consciente del Producto (Te conoce, duda)</option>
-                         <option>Totalmente Consciente (Fan, listo para comprar)</option>
+                        <option>Inconsciente (Quiere viajar pero no sabe dónde)</option>
+                        <option>Consciente del Problema (Quiere naturaleza/descanso, busca destino)</option>
+                        <option>Consciente de la Solución (Sabe que quiere Minca/Tu región, compara opciones)</option>
+                        <option>Consciente del Producto (Ya vio tu hotel/tour, tiene dudas específicas)</option>
+                        <option>Totalmente Consciente (Te ama, solo necesita el link de pago)</option>
                       </select>
                     </div>
 
                     <div className="space-y-3">
-                      <label className="text-xs font-black text-orange-400 uppercase tracking-widest">Objeciones Principales</label>
-                      <textarea 
+                      <label className="text-xs font-black text-orange-400 uppercase tracking-widest">Objeciones Principales (Miedos)</label>
+                      <textarea
                         className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none transition-all h-24 focus:border-green-500 focus:bg-white font-medium resize-none"
-                        placeholder="Es muy caro, no tengo tiempo, no sé si funcionará para mí..."
+                        placeholder="Es muy lejos para ir solo un fin de semana, me da miedo el transporte, ¿hay internet para trabajar?..."
                         value={pieData.audiencia.objeciones}
                         onChange={(e) => handleInputChange('audiencia', 'objeciones', e.target.value)}
                       />
@@ -452,37 +487,36 @@ FECHA: ${new Date().toISOString()}
                   </header>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                     {[
-                        { id: 'Ventas', icon: <DollarSign className="w-6 h-6" />, desc: 'Conversión directa (Bottom Funnel)' },
-                        { id: 'Autoridad', icon: <ShieldAlert className="w-6 h-6" />, desc: 'Posicionamiento (Mid Funnel)' },
-                        { id: 'Alcance', icon: <TrendingUp className="w-6 h-6" />, desc: 'Visibilidad masiva (Top Funnel)' }
-                     ].map((obj) => (
-                        <button
-                           key={obj.id}
-                           onClick={() => handleInputChange('objetivo', 'prioritario', obj.id)}
-                           className={`p-6 rounded-2xl border-2 text-left transition-all ${
-                              pieData.objetivo.prioritario === obj.id
-                              ? 'border-red-500 bg-red-50 ring-2 ring-red-200 ring-offset-2'
-                              : 'border-slate-100 hover:border-slate-300'
-                           }`}
-                        >
-                           <div className={`mb-3 ${pieData.objetivo.prioritario === obj.id ? 'text-red-600' : 'text-slate-400'}`}>
-                              {obj.icon}
-                           </div>
-                           <div className="font-bold text-lg mb-1">{obj.id}</div>
-                           <div className="text-xs text-slate-500 leading-tight">{obj.desc}</div>
-                        </button>
-                     ))}
+                    {[
+                      { id: 'Ventas', icon: <DollarSign className="w-6 h-6" />, desc: 'Llenar cupos/habitaciones ya' },
+                      { id: 'Autoridad', icon: <ShieldAlert className="w-6 h-6" />, desc: 'Ser referente del destino' },
+                      { id: 'Alcance', icon: <TrendingUp className="w-6 h-6" />, desc: 'Que más gente conozca el lugar' }
+                    ].map((obj) => (
+                      <button
+                        key={obj.id}
+                        onClick={() => handleInputChange('objetivo', 'prioritario', obj.id)}
+                        className={`p-6 rounded-2xl border-2 text-left transition-all ${pieData.objetivo.prioritario === obj.id
+                          ? 'border-red-500 bg-red-50 ring-2 ring-red-200 ring-offset-2'
+                          : 'border-slate-100 hover:border-slate-300'
+                          }`}
+                      >
+                        <div className={`mb-3 ${pieData.objetivo.prioritario === obj.id ? 'text-red-600' : 'text-slate-400'}`}>
+                          {obj.icon}
+                        </div>
+                        <div className="font-bold text-lg mb-1">{obj.id}</div>
+                        <div className="text-xs text-slate-500 leading-tight">{obj.desc}</div>
+                      </button>
+                    ))}
                   </div>
 
                   <div className="space-y-3">
-                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest">¿Por qué este objetivo ahora?</label>
-                     <textarea 
-                        className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none transition-all h-32 focus:border-red-500 focus:bg-white font-medium resize-none"
-                        placeholder="Justificación estratégica..."
-                        value={pieData.objetivo.razon}
-                        onChange={(e) => handleInputChange('objetivo', 'razon', e.target.value)}
-                     />
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">¿Por qué este objetivo ahora?</label>
+                    <textarea
+                      className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none transition-all h-32 focus:border-red-500 focus:bg-white font-medium resize-none"
+                      placeholder="Ej. Viene temporada baja y necesito asegurar reservas, o quiero lanzar una nueva ruta..."
+                      value={pieData.objetivo.razon}
+                      onChange={(e) => handleInputChange('objetivo', 'razon', e.target.value)}
+                    />
                   </div>
                 </section>
               )}
@@ -494,7 +528,7 @@ FECHA: ${new Date().toISOString()}
                     <h2 className="text-3xl md:text-4xl font-black italic uppercase tracking-tighter text-slate-900 mb-2">Sincronización</h2>
                     <p className="text-slate-500 text-lg">Validación por IA y carga al sistema operativo.</p>
                   </header>
-                  
+
                   <div className="bg-slate-900 text-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl relative overflow-hidden group">
                     {/* Abstract Shapes Background */}
                     <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600 rounded-full blur-[100px] opacity-20 group-hover:opacity-30 transition-opacity"></div>
@@ -510,11 +544,11 @@ FECHA: ${new Date().toISOString()}
                           <p className="text-slate-400 text-xs uppercase tracking-widest">Pre-Flight Check</p>
                         </div>
                       </div>
-                      
+
                       {!diagnosis ? (
                         <div className="text-center py-8">
                           <p className="text-slate-300 mb-8 max-w-lg mx-auto">El sistema analizará la coherencia entre tu <span className="text-white font-bold">Objetivo ({pieData.objetivo.prioritario})</span> y el <span className="text-white font-bold">Nivel de Sofisticación</span> de tu audiencia.</p>
-                          <button 
+                          <button
                             onClick={runDiagnosis}
                             className="w-full md:w-auto px-12 bg-white text-slate-900 py-4 rounded-xl font-black uppercase tracking-widest hover:bg-blue-50 hover:scale-105 transition-all flex items-center justify-center gap-3 shadow-lg mx-auto"
                           >
@@ -524,23 +558,23 @@ FECHA: ${new Date().toISOString()}
                       ) : (
                         <div className="space-y-6 animate-in zoom-in-95">
                           <div className="bg-white/5 border border-white/10 p-6 rounded-2xl relative overflow-hidden">
-                             <div className="absolute left-0 top-0 h-full w-1 bg-yellow-400"></div>
+                            <div className="absolute left-0 top-0 h-full w-1 bg-yellow-400"></div>
                             <p className="text-yellow-400 font-black uppercase text-[10px] mb-2 tracking-widest flex items-center gap-2">
                               <AlertTriangle size={12} /> Diagnóstico de Coherencia
                             </p>
                             <div className="space-y-4">
-                               <div>
-                                  <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Problema Detectado</p>
-                                  <p className="text-white font-medium text-lg leading-snug">{diagnosis.problema}</p>
-                               </div>
-                               <div>
-                                  <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Palance de Solución</p>
-                                  <p className="text-blue-300 italic">{diagnosis.palanca}</p>
-                               </div>
+                              <div>
+                                <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Problema Detectado</p>
+                                <p className="text-white font-medium text-lg leading-snug">{diagnosis.problema}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Palance de Solución</p>
+                                <p className="text-blue-300 italic">{diagnosis.palanca}</p>
+                              </div>
                             </div>
                           </div>
-                          
-                          <button 
+
+                          <button
                             onClick={handleSubmitToGoogleCloud}
                             disabled={isSubmitting}
                             className="w-full bg-blue-600 text-white py-5 rounded-xl font-black uppercase tracking-widest hover:bg-blue-500 transition-all flex items-center justify-center gap-3 shadow-xl hover:shadow-2xl hover:-translate-y-1"
@@ -557,21 +591,21 @@ FECHA: ${new Date().toISOString()}
 
             {/* Footer Navigation */}
             <div className="p-6 md:p-8 bg-slate-50 border-t border-slate-100 flex justify-between items-center z-10">
-              <button 
+              <button
                 onClick={() => setActiveStep(s => Math.max(0, s - 1))}
                 disabled={activeStep === 0}
                 className={`flex items-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${activeStep === 0 ? 'opacity-0 pointer-events-none' : 'text-slate-400 hover:text-slate-900 hover:bg-white'}`}
               >
                 <ChevronLeft size={18} /> <span className="text-xs uppercase tracking-wider">Anterior</span>
               </button>
-              
+
               <div className="flex gap-1">
-                 {steps.map((_, i) => (
-                    <div key={i} className={`w-2 h-2 rounded-full transition-colors ${i === activeStep ? 'bg-slate-900' : 'bg-slate-300'}`}></div>
-                 ))}
+                {steps.map((_, i) => (
+                  <div key={i} className={`w-2 h-2 rounded-full transition-colors ${i === activeStep ? 'bg-slate-900' : 'bg-slate-300'}`}></div>
+                ))}
               </div>
 
-              <button 
+              <button
                 onClick={() => setActiveStep(s => Math.min(steps.length - 1, s + 1))}
                 disabled={activeStep === steps.length - 1}
                 className={`flex items-center gap-3 px-8 py-3 rounded-xl font-bold bg-slate-900 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all ${activeStep === steps.length - 1 ? 'opacity-0 pointer-events-none' : ''}`}
